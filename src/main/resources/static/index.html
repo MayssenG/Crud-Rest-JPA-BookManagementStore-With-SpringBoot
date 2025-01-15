@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Management</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(to bottom, #2C3E50, #4CA1AF);
+            color: #ecf0f1;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #34495E;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #7f8c8d;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #1ABC9C;
+            color: white;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+        .btn-delete {
+            background-color: #E74C3C;
+        }
+        .btn-update {
+            background-color: #F1C40F;
+            color: black;
+        }
+        .btn-create {
+            background-color: #27AE60;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #34495E;
+            padding: 20px;
+            border-radius: 10px;
+            width: 400px;
+            text-align: center;
+            position: relative;
+            color: #ecf0f1;
+        }
+        .modal-content input {
+            width: 96%;
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid #7f8c8d;
+            border-radius: 5px;
+            background: #2C3E50;
+            color: white;
+        }
+        .modal-content button {
+            margin-top: 10px;
+            margin-left: 10px;
+        }
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            color: #ecf0f1;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Book Management Store</h1>
+        <button class="btn btn-create" onclick="openCreateBookModal()">Add Book</button>
+    </div>
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Image</th>
+            <th>Price</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody id="book-list">
+        <!-- Book rows will be dynamically added here -->
+        </tbody>
+    </table>
+</div>
+
+<!-- Create Book Modal -->
+<div id="create-book-modal" class="modal">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeCreateBookModal()">&times;</button>
+        <h2>Add Book</h2>
+        <input type="text" id="new-book-title" placeholder="Title">
+        <input type="text" id="new-book-author" placeholder="Author">
+        <input type="text" id="new-book-image" placeholder="Image URL">
+        <input type="number" id="new-book-price" placeholder="Price">
+        <button class="btn btn-create" onclick="createBook()">Add</button>
+    </div>
+</div>
+
+<!-- Update Book Modal -->
+<div id="update-book-modal" class="modal">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeUpdateBookModal()">&times;</button>
+        <h2>Update Book</h2>
+        <input type="text" id="update-book-title" placeholder="Title">
+        <input type="text" id="update-book-author" placeholder="Author">
+        <input type="text" id="update-book-image" placeholder="Image URL">
+        <input type="number" id="update-book-price" placeholder="Price">
+        <button class="btn btn-update" onclick="confirmUpdateBook()">Update</button>
+    </div>
+</div>
+
+<script>
+    const API_BASE_URL = '/books';
+    let bookToUpdate = null;
+
+    function fetchBooks() {
+        fetch(API_BASE_URL)
+            .then(response => response.json())
+            .then(books => {
+                const bookList = document.getElementById('book-list');
+                bookList.innerHTML = books.map(book => `
+                        <tr>
+                            <td>${book.id}</td>
+                            <td>${book.title}</td>
+                            <td>${book.author}</td>
+                            <td><img src="${book.imageUrl}" alt="${book.title}" style="max-height: 50px;"></td>
+                            <td>${book.price}</td>
+                            <td class="buttons">
+                                <button class="btn btn-update" onclick="openUpdateBookModal(${book.id}, '${book.title}', '${book.author}', '${book.imageUrl}', ${book.price})">Update</button>
+                                <button class="btn btn-delete" onclick="deleteBook(${book.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `).join('');
+            });
+    }
+
+    function deleteBook(bookId) {
+        fetch(`${API_BASE_URL}/${bookId}`, { method: 'DELETE' })
+            .then(() => fetchBooks())
+            .catch(err => alert('Error deleting book: ' + err));
+    }
+
+    function openCreateBookModal() {
+        document.getElementById('create-book-modal').style.display = 'flex';
+    }
+
+    function closeCreateBookModal() {
+        document.getElementById('create-book-modal').style.display = 'none';
+    }
+
+    function createBook() {
+        const title = document.getElementById('new-book-title').value;
+        const author = document.getElementById('new-book-author').value;
+        const imageUrl = document.getElementById('new-book-image').value;
+        const price = document.getElementById('new-book-price').value;
+
+        fetch(API_BASE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, author, imageUrl, price })
+        })
+            .then(() => {
+                closeCreateBookModal();
+                fetchBooks();
+            })
+            .catch(err => alert('Error creating book: ' + err));
+    }
+
+    function openUpdateBookModal(id, title, author, imageUrl, price) {
+        bookToUpdate = id;
+        document.getElementById('update-book-title').value = title;
+        document.getElementById('update-book-author').value = author;
+        document.getElementById('update-book-image').value = imageUrl;
+        document.getElementById('update-book-price').value = price;
+        document.getElementById('update-book-modal').style.display = 'flex';
+    }
+
+    function closeUpdateBookModal() {
+        document.getElementById('update-book-modal').style.display = 'none';
+    }
+
+    function confirmUpdateBook() {
+        const title = document.getElementById('update-book-title').value;
+        const author = document.getElementById('update-book-author').value;
+        const imageUrl = document.getElementById('update-book-image').value;
+        const price = document.getElementById('update-book-price').value;
+
+        fetch(`${API_BASE_URL}/${bookToUpdate}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, author, imageUrl, price })
+        })
+            .then(() => {
+                closeUpdateBookModal();
+                fetchBooks();
+            })
+            .catch(err => alert('Error updating book: ' + err));
+    }
+
+    fetchBooks();
+</script>
+</body>
+</html>
