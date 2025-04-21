@@ -79,7 +79,7 @@
             position: relative;
             color: #ecf0f1;
         }
-        .modal-content input {
+        .modal-content input, .modal-content select {
             width: 96%;
             margin-bottom: 10px;
             padding: 8px;
@@ -109,6 +109,7 @@
     <div class="header">
         <h1>Book Management Store</h1>
         <button class="btn btn-create" onclick="openCreateBookModal()">Add Book</button>
+        <button class="btn btn-create" onclick="openManageCategoriesModal()">Manage Categories</button>
     </div>
     <table>
         <thead>
@@ -118,6 +119,7 @@
             <th>Author</th>
             <th>Image</th>
             <th>Price</th>
+            <th>Categories</th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -136,7 +138,36 @@
         <input type="text" id="new-book-author" placeholder="Author">
         <input type="text" id="new-book-image" placeholder="Image URL">
         <input type="number" id="new-book-price" placeholder="Price">
+        <select id="new-book-categories" multiple required>
+            <!-- Categories will be dynamically populated here -->
+        </select>
         <button class="btn btn-create" onclick="createBook()">Add</button>
+    </div>
+</div>
+
+<!-- Manage Categories Modal -->
+<div id="manage-categories-modal" class="modal">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeManageCategoriesModal()">&times;</button>
+        <h2>Manage Categories</h2>
+        <ul id="category-list">
+            <!-- Categories will be dynamically listed here -->
+        </ul>
+        <input type="text" id="new-category-name" placeholder="Category Name">
+        <button class="btn btn-create" onclick="createCategory()">Add Category</button>
+    </div>
+</div>
+
+<!-- Comments Modal -->
+<div id="comments-modal" class="modal">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeCommentsModal()">&times;</button>
+        <h2>Comments</h2>
+        <ul id="comments-list">
+            <!-- Comments will be dynamically listed here -->
+        </ul>
+        <input type="text" id="new-comment-text" placeholder="Add a comment">
+        <button class="btn btn-create" onclick="addComment()">Add Comment</button>
     </div>
 </div>
 
@@ -149,69 +180,172 @@
         <input type="text" id="update-book-author" placeholder="Author">
         <input type="text" id="update-book-image" placeholder="Image URL">
         <input type="number" id="update-book-price" placeholder="Price">
-        <button class="btn btn-update" onclick="confirmUpdateBook()">Update</button>
+        <select id="update-book-categories" multiple required>
+            <!-- Categories will be dynamically populated here -->
+        </select>
+        <button class="btn btn-update" onclick="confirmUpdateBook(categoriesToUpdate)">Update</button>
     </div>
 </div>
 
 <script>
-    const API_BASE_URL = '/books';
+    const BOOK_API_URL = '/books';
+    const CATEGORY_API_URL = '/categories';
+    const COMMENT_API_URL = '/comments';
+    let currentBookForComments = null;
     let bookToUpdate = null;
+    let categoriesToUpdate = null;
 
+    // Fetch and display books
     function fetchBooks() {
-        fetch(API_BASE_URL)
-            .then(response => response.json())
+        console.log("Fetching books from API...");
+        fetch(BOOK_API_URL)
+            .then(response => {
+                console.log("API Response:", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(books => {
+                console.log("Books fetched successfully:", books);
                 const bookList = document.getElementById('book-list');
-                bookList.innerHTML = books.map(book => `
-                        <tr>
-                            <td>${book.id}</td>
-                            <td>${book.title}</td>
-                            <td>${book.author}</td>
-                            <td><img src="${book.imageUrl}" alt="${book.title}" style="max-height: 50px;"></td>
-                            <td>${book.price}</td>
-                            <td class="buttons">
-                                <button class="btn btn-update" onclick="openUpdateBookModal(${book.id}, '${book.title}', '${book.author}', '${book.imageUrl}', ${book.price})">Update</button>
-                                <button class="btn btn-delete" onclick="deleteBook(${book.id})">Delete</button>
-                            </td>
-                        </tr>
-                    `).join('');
+                if (books.length === 0) {
+                    console.log("No books found in the database.");
+                    bookList.innerHTML = "<tr><td colspan='7'>No books available</td></tr>";
+                } else {
+                    bookList.innerHTML = books.map(book => `
+                    <tr>
+                        <td>${book.idBook}</td>
+                        <td>${book.title}</td>
+                        <td>${book.author}</td>
+                        <td><img src="${book.imageUrl}" alt="${book.title}" style="max-height: 50px;"></td>
+                        <td>${book.price}</td>
+                        <td>${book.categories.map(category => category.name).join(', ')}</td>
+                        <td class="buttons">
+                            <button class="btn btn-update" onclick="openUpdateBookModal(${book.idBook}, '${book.title}', '${book.author}', '${book.imageUrl}', ${book.price}, '${book.categories}')">Update</button>
+                            <button class="btn btn-delete" onclick="deleteBook(${book.idBook})">Delete</button>
+                            <button class="btn btn-create" onclick="openCommentsModal(${book.idBook})">Comments</button>
+                        </td>
+                    </tr>
+                `).join('');
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching books:", error);
+                const bookList = document.getElementById('book-list');
+                bookList.innerHTML = "<tr><td colspan='7'>Error loading books. Please try again later.</td></tr>";
             });
     }
 
-    function deleteBook(bookId) {
-        fetch(`${API_BASE_URL}/${bookId}`, { method: 'DELETE' })
-            .then(() => fetchBooks())
-            .catch(err => alert('Error deleting book: ' + err));
+    // Fetch and display categories
+    function fetchCategories(openModal) {
+        return fetch(CATEGORY_API_URL)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(categories => {
+                const categoriesSelect = document.getElementById('new-book-categories');
+                const updateCategoriesSelect = document.getElementById('update-book-categories');
+                categoriesSelect.innerHTML = categories.map(category => `
+                <option value="${category.idCategory}">${category.name}</option>
+            `).join('');
+                updateCategoriesSelect.innerHTML = categories.map(category => `
+                <option value="${category.idCategory}">${category.name}</option>
+            `).join('');
+
+                if (openModal) {
+                    const categoriesList = document.getElementById('category-list');
+                    categoriesList.innerHTML = categories.map(category => `
+                    <li>${category.name} <button class="btn btn-delete" onclick="deleteCategory(${category.idCategory})">Delete</button></li>
+                `).join('');
+                    document.getElementById('manage-categories-modal').style.display = 'flex';
+                }
+                return categories;
+            })
+            .catch(error => {
+                console.error("Error fetching categories:", error);
+            });
     }
 
-    function openCreateBookModal() {
-        document.getElementById('create-book-modal').style.display = 'flex';
+    // Create a new category
+    function createCategory() {
+        const categoryName = document.getElementById('new-category-name').value;
+        fetch(CATEGORY_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: categoryName })
+        })
+            .then(() => {
+                fetchCategories(true);
+                document.getElementById('new-category-name').value = '';
+            })
+            .catch(err => alert('Error creating category: ' + err));
     }
 
-    function closeCreateBookModal() {
-        document.getElementById('create-book-modal').style.display = 'none';
-    }
-
+    // Create a new book
     function createBook() {
         const title = document.getElementById('new-book-title').value;
         const author = document.getElementById('new-book-author').value;
         const imageUrl = document.getElementById('new-book-image').value;
-        const price = document.getElementById('new-book-price').value;
+        const price = parseFloat(document.getElementById('new-book-price').value);
+        const categoryIds = Array.from(document.getElementById('new-book-categories').selectedOptions)
+            .map(option => parseInt(option.value));
 
-        fetch(API_BASE_URL, {
+        console.log("Creating book with data:", { title, author, imageUrl, price, categoryIds });
+
+        fetch(BOOK_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, author, imageUrl, price })
+            body: JSON.stringify({ title, author, imageUrl, price, categoryIds })
         })
+            .then(response => {
+                console.log("Create book API response:", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(() => {
+                console.log("Book created successfully.");
                 closeCreateBookModal();
                 fetchBooks();
             })
-            .catch(err => alert('Error creating book: ' + err));
+            .catch(error => {
+                console.error("Error creating book:", error);
+                alert('Error creating book: ' + error.message);
+            });
     }
 
-    function openUpdateBookModal(id, title, author, imageUrl, price) {
+    // Delete a book
+    function deleteBook(bookId) {
+        console.log("Deleting book with ID:", bookId);
+        fetch(`${BOOK_API_URL}/${bookId}`, { method: 'DELETE' })
+            .then(response => {
+                console.log("Delete book API response:", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                fetchBooks();
+            })
+            .catch(error => {
+                console.error("Error deleting book:", error);
+                alert('Error deleting book: ' + error.message);
+            });
+    }
+
+    // Open the create book modal
+    function openCreateBookModal() {
+        fetchCategories(false);
+        document.getElementById('create-book-modal').style.display = 'flex';
+    }
+
+    function openUpdateBookModal(id, title, author, imageUrl, price, categories) {
+        fetchCategories();
         bookToUpdate = id;
+        categoriesToUpdate = categories;
         document.getElementById('update-book-title').value = title;
         document.getElementById('update-book-author').value = author;
         document.getElementById('update-book-image').value = imageUrl;
@@ -223,25 +357,127 @@
         document.getElementById('update-book-modal').style.display = 'none';
     }
 
-    function confirmUpdateBook() {
+    // Close the create book modal
+    function closeCreateBookModal() {
+        document.getElementById('create-book-modal').style.display = 'none';
+    }
+
+    function confirmUpdateBook(previousCategories) {
         const title = document.getElementById('update-book-title').value;
         const author = document.getElementById('update-book-author').value;
         const imageUrl = document.getElementById('update-book-image').value;
         const price = document.getElementById('update-book-price').value;
+        const categoriesSelect = document.getElementById('update-book-categories');
+        const categoryIds = Array.from(categoriesSelect.selectedOptions).map(option => parseInt(option.value));
 
-        fetch(`${API_BASE_URL}/${bookToUpdate}`, {
+        fetch(`${BOOK_API_URL}/${bookToUpdate}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, author, imageUrl, price })
+            body: JSON.stringify({ title, author, imageUrl, price, categoryIds })
         })
-            .then(() => {
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
                 closeUpdateBookModal();
                 fetchBooks();
             })
-            .catch(err => alert('Error updating book: ' + err));
+            .catch(error => {
+                console.error("Error updating book:", error);
+                alert('Error updating book: ' + error.message);
+            });
     }
 
+    // Open the manage categories modal
+    function openManageCategoriesModal() {
+        fetchCategories(true);
+    }
+
+    // Close the manage categories modal
+    function closeManageCategoriesModal() {
+        document.getElementById('manage-categories-modal').style.display = 'none';
+    }
+
+    // Open the comments modal
+    function openCommentsModal(bookId) {
+        currentBookForComments = bookId;
+        console.log("Fetching comments for book ID:", bookId);
+        fetch(`${COMMENT_API_URL}/book/${bookId}`)
+            .then(response => {
+                console.log("API Response:", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(comments => {
+                console.log("Comments fetched successfully:", comments);
+                const commentsList = document.getElementById('comments-list');
+                if (comments.length === 0) {
+                    console.log("No comments found in the database.");
+                    commentsList.innerHTML = "<tr><td colspan='7'>No comments available</td></tr>";
+                } else {
+                    commentsList.innerHTML = comments.map(comment => `
+                    <li>${comment.content} <button class="btn btn-delete" onclick="deleteComment(${comment.idComment})">Delete</button></li>
+                 `).join('');
+                }
+                document.getElementById('comments-modal').style.display = 'flex';
+            })
+            .catch(error => {
+                console.error("Error fetching comments:", error);
+                alert('Error fetching comments: ' + error.message);
+            });
+    }
+
+    // Add a new comment
+    function addComment() {
+        const commentText = document.getElementById('new-comment-text').value;
+        console.log("Adding comment:", commentText);
+        fetch(COMMENT_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: commentText, idBook: currentBookForComments })
+        })
+            .then(response => {
+                console.log("Add comment API response:", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(() => {
+                console.log("Comment added successfully.");
+                document.getElementById('new-comment-text').value = '';
+                openCommentsModal(currentBookForComments);
+            })
+            .catch(error => {
+                console.error("Error adding comment:", error);
+                alert('Error adding comment: ' + error.message);
+            });
+    }
+
+    // Delete a comment
+    function deleteComment(commentId) {
+        fetch(`${COMMENT_API_URL}/${commentId}`, { method: 'DELETE' })
+            .then(() => openCommentsModal(currentBookForComments))
+            .catch(err => alert('Error deleting comment: ' + err));
+    }
+
+    // Delete a category
+    function deleteCategory(categoryId) {
+        fetch(`${CATEGORY_API_URL}/${categoryId}`, { method: 'DELETE' })
+            .then(() => fetchCategories(true))
+            .catch(err => alert('Error deleting category: ' + err));
+    }
+
+    // Close the comments modal
+    function closeCommentsModal() {
+        document.getElementById('comments-modal').style.display = 'none';
+    }
+
+    // Initialize the page
     fetchBooks();
+    fetchCategories(false);
 </script>
 </body>
 </html>

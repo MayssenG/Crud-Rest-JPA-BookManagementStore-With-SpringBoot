@@ -1,13 +1,16 @@
 package com.bookstore.repository;
 
-import com.bookstore.model.Book;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
-import java.util.List;
+import com.bookstore.model.entity.Book;
 
 public interface BookRepository extends JpaRepository<Book, Integer> {
 
-  List<Book> findByAuthor(String author);
-  List<Book> findByTitleContaining(String keyword);
-  List<Book> findByPriceBetween(double minPrice, double maxPrice);
+  public Iterable<Book> findByTitle(String title);
+
+  public Iterable<Book> findByCategoriesName(String name);
+
+  @Query("FROM Book WHERE title = ?1")
+  public Iterable<Book> findByTitleJPQL(String name);
 }
